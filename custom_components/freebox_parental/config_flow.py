@@ -24,7 +24,7 @@ class FreeboxFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         pairing = await self.api.open_pairing()
         self.track_id = pairing["result"]["track_id"]
 
-        # 🔥 LANCE la tâche en arrière-plan
+        # 🔥 lance la tâche en arrière-plan
         self.hass.async_create_task(self._wait_for_pairing())
 
         return self.async_show_progress(
@@ -32,9 +32,22 @@ class FreeboxFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             progress_action="waiting_for_validation"
         )
 
+    async def async_step_pairing(self, user_input=None):
+        # 🔥 appelé APRÈS progress_done
+        if not getattr(self, "app_token", None):
+            return self.async_abort(reason="access_denied")
+
+        return self.async_create_entry(
+            title="Freebox",
+            data={
+                "host": self.host,
+                "app_token": self.app_token
+            }
+        )
+
     async def _wait_for_pairing(self):
-        """Tâche async qui attend la validation Freebox"""
-        for _ in range(30):  # 60 secondes max
+        """Attente validation Freebox"""
+        for _ in range(30):  # ~60s
             status = await self.api.get_pairing_status(self.track_id)
             result = status.get("result", {})
 
@@ -48,21 +61,8 @@ class FreeboxFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
             await asyncio.sleep(2)
 
-        # 🔥 IMPORTANT → débloque le spinner
+        # 🔥 🔥 LA LIGNE QUI CHANGE TOUT
         self.hass.config_entries.flow.async_configure(
-            flow_id=self.flow_id
-        )
-
-    async def async_step_pairing(self, user_input=None):
-        # 🔥 appelé après async_configure()
-
-        if not getattr(self, "app_token", None):
-            return self.async_abort(reason="access_denied")
-
-        return self.async_create_entry(
-            title="Freebox",
-            data={
-                "host": self.host,
-                "app_token": self.app_token
-            }
+            flow_id=self.flow_id,
+            user_input=None
         )
