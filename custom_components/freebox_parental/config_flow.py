@@ -24,7 +24,7 @@ class FreeboxFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         pairing = await self.api.open_pairing()
         self.track_id = pairing["result"]["track_id"]
 
-        # 🔥 lance la tâche en arrière-plan
+        # 🔥 LANCE tâche arrière-plan
         self.hass.async_create_task(self._wait_for_pairing())
 
         return self.async_show_progress(
@@ -32,37 +32,37 @@ class FreeboxFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             progress_action="waiting_for_validation"
         )
 
-    async def async_step_pairing(self, user_input=None):
-        # 🔥 appelé APRÈS progress_done
-        if not getattr(self, "app_token", None):
-            return self.async_abort(reason="access_denied")
-
-        return self.async_create_entry(
-            title="Freebox",
-            data={
-                "host": self.host,
-                "app_token": self.app_token
-            }
-        )
-
     async def _wait_for_pairing(self):
         """Attente validation Freebox"""
-        for _ in range(30):  # ~60s
+        for _ in range(30):
             status = await self.api.get_pairing_status(self.track_id)
             result = status.get("result", {})
 
             if result.get("status") == "granted":
-                self.app_token = result.get("app_token")
-                break
+                token = result.get("app_token")
+
+                # 🔥 FIN DIRECTE DU FLOW (clé du fix)
+                self.hass.config_entries.flow.async_create_entry(
+                    self.flow_id,
+                    title="Freebox",
+                    data={
+                        "host": self.host,
+                        "app_token": token
+                    }
+                )
+                return
 
             if result.get("status") == "denied":
-                self.app_token = None
-                break
+                self.hass.config_entries.flow.async_abort(
+                    self.flow_id,
+                    reason="access_denied"
+                )
+                return
 
             await asyncio.sleep(2)
 
-        # 🔥 🔥 LA LIGNE QUI CHANGE TOUT
-        self.hass.config_entries.flow.async_configure(
-            flow_id=self.flow_id,
-            user_input=None
+        # timeout
+        self.hass.config_entries.flow.async_abort(
+            self.flow_id,
+            reason="timeout"
         )
