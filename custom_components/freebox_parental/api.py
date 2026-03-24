@@ -18,7 +18,7 @@ class FreeboxAPI:
                 # Flow pairing automatique
                 async with session.post(f"{self.host}/api/v8/login/authorize/", json={
                     "app_id": self.app_id,
-                    "app_name": "Home Assistant Freebox",
+                    "app_name": "Home Assistant Freebox Parental Ultimate",
                     "device_name": "HA",
                     "app_version": "1.0"
                 }) as r:
@@ -28,9 +28,10 @@ class FreeboxAPI:
                     # Attente de validation manuelle sur Freebox OS
                     while True:
                         async with session.get(f"{self.host}/api/v8/login/authorize/{track_id}") as status_r:
-                            status = (await status_r.json())["result"]["status"]
+                            status_json = await status_r.json()
+                            status = status_json["result"]["status"]
                             if status == "granted":
-                                self.app_token = (await status_r.json())["result"]["app_token"]
+                                self.app_token = status_json["result"]["app_token"]
                                 break
                         await asyncio.sleep(2)
 
@@ -41,4 +42,25 @@ class FreeboxAPI:
             }) as resp:
                 self.session_token = (await resp.json())["result"]["session_token"]
 
-    # toutes les fonctions request/get/set restent async comme précédemment
+    async def request(self, method, path, data=None):
+        headers = {"X-Fbx-App-Auth": self.session_token} if self.session_token else {}
+        async with aiohttp.ClientSession() as session:
+            async with session.request(method, f"{self.host}/api/v8{path}", headers=headers, json=data) as resp:
+                return await resp.json()
+
+    async def get_devices(self):
+        return await self.request("GET", "/lan/browser/pub/")
+
+    async def get_profiles(self):
+        return await self.request("GET", "/parental/profile/")
+
+    async def set_device(self, device_id, state):
+        return await self.request("PUT", f"/lan/browser/pub/{device_id}", {"active": state})
+
+    async def set_profile(self, profile_id, enable):
+        week = (
+            {d: [["00:00", "23:59"]] for d in ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"]}
+            if enable else
+            {d: [] for d in ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"]}
+        )
+        return await self.request("PUT", f"/parental/profile/{profile_id}", {"week": week})
