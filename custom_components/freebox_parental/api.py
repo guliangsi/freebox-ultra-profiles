@@ -1,67 +1,46 @@
 import aiohttp
 import hashlib
+import asyncio
 
 class FreeboxAPI:
-    def __init__(self, host, app_id="homeassistant.freebox", app_token=None):
+    def __init__(self, host, app_id="homeassistant.freebox"):
         self.host = host
         self.app_id = app_id
-        self.app_token = app_token
+        self.app_token = None
         self.session_token = None
-        self._session = aiohttp.ClientSession()
-
-    async def get_challenge(self):
-        async with self._session.get(f"{self.host}/api/v8/login/") as resp:
-            return (await resp.json())["result"]["challenge"]
 
     async def open_pairing(self):
-        async with self._session.post(
-            f"{self.host}/api/v8/login/authorize/",
-            json={
+        """Crée la demande de pairing, renvoie track_id"""
+        async with aiohttp.ClientSession() as session:
+            async with session.post(f"{self.host}/api/v8/login/authorize/", json={
                 "app_id": self.app_id,
                 "app_name": "Home Assistant Freebox",
                 "device_name": "HA",
-                "app_version": "1.0",
-            },
-        ) as resp:
-            return await resp.json()
+                "app_version": "1.0"
+            }) as r:
+                res = await r.json()
+                return res  # contient result["track_id"]
 
     async def get_pairing_status(self, track_id):
-        async with self._session.get(
-            f"{self.host}/api/v8/login/authorize/{track_id}"
-        ) as resp:
-            return await resp.json()
+        """Récupère le status actuel du pairing"""
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{self.host}/api/v8/login/authorize/{track_id}") as r:
+                return await r.json()
 
     async def login(self):
-        challenge = await self.get_challenge()
+        """Finalise la connexion pour obtenir session_token"""
+        async with aiohttp.ClientSession() as session:
+            # Récupère challenge
+            async with session.get(f"{self.host}/api/v8/login/") as resp:
+                challenge = (await resp.json())["result"]["challenge"]
 
-        password = hashlib.sha1((challenge + self.app_token).encode()).hexdigest()
+            if not self.app_token:
+                raise Exception("App token manquant, pairing non validé")
 
-        async with self._session.post(
-            f"{self.host}/api/v8/login/session/",
-            json={
+            password = hashlib.sha1((challenge + self.app_token).encode()).hexdigest()
+
+            async with session.post(f"{self.host}/api/v8/login/session/", json={
                 "app_id": self.app_id,
-                "password": password,
-            },
-        ) as resp:
-            data = await resp.json()
-
-            if not data.get("success"):
-                raise Exception(data)
-
-            self.session_token = data["result"]["session_token"]
-
-    async def request(self, method, path, data=None):
-        headers = {"X-Fbx-App-Auth": self.session_token}
-
-        async with self._session.request(
-            method,
-            f"{self.host}/api/v8{path}",
-            headers=headers,
-            json=data,
-        ) as resp:
-            result = await resp.json()
-
-            if not result.get("success"):
-                raise Exception(result)
-
-            return result
+                "password": password
+            }) as resp:
+                self.session_token = (await resp.json())["result"]["session_token"]
