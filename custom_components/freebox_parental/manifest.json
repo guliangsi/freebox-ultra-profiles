@@ -1,10 +1,9 @@
 {
   "domain": "freebox_parental",
-  "name": "Freebox Parental Ultimate",
-  "version": "1.0.0",
+  "name": "Freebox Parental",
   "documentation": "https://github.com/TONUSER/ha-freebox-parental",
-  "dependencies": [],
-  "codeowners": ["@TONUSER"],
-  "requirements": ["requests"],
-  "config_flow": true
+  "version": "1.0.0",
+  "config_flow": true,
+  "requirements": [],
+  "codeowners": ["@guliangsi"]
 }

@@ -1,75 +1,39 @@
 import aiohttp
 import hashlib
-import asyncio
 
 class FreeboxAPI:
-    def __init__(self, host, app_id="homeassistant.freebox"):
+    def __init__(self, host, app_id="homeassistant.freebox", app_token=None):
         self.host = host
         self.app_id = app_id
-        self.app_token = None
+        self.app_token = app_token
         self.session_token = None
-        self._session = None
+        self._session = aiohttp.ClientSession()
+
+    async def get_challenge(self):
+        async with self._session.get(f"{self.host}/api/v8/login/") as resp:
+            return (await resp.json())["result"]["challenge"]
+
+    async def open_pairing(self):
+        async with self._session.post(
+            f"{self.host}/api/v8/login/authorize/",
+            json={
+                "app_id": self.app_id,
+                "app_name": "Home Assistant Freebox",
+                "device_name": "HA",
+                "app_version": "1.0",
+            },
+        ) as resp:
+            return await resp.json()
+
+    async def get_pairing_status(self, track_id):
+        async with self._session.get(
+            f"{self.host}/api/v8/login/authorize/{track_id}"
+        ) as resp:
+            return await resp.json()
 
     async def login(self):
-        # 🔥 évite double login
-        if self.session_token:
-            return
+        challenge = await self.get_challenge()
 
-        if self._session is None:
-            self._session = aiohttp.ClientSession()
-
-        # 🔹 1. Récupération du challenge
-        async with self._session.get(f"{self.host}/api/v8/login/") as resp:
-            result = await resp.json()
-            challenge = result["result"]["challenge"]
-
-        # 🔹 2. Pairing automatique (si pas encore fait)
-        if self.app_token is None:
-            async with self._session.post(
-                f"{self.host}/api/v8/login/authorize/",
-                json={
-                    "app_id": self.app_id,
-                    "app_name": "Home Assistant Freebox",
-                    "device_name": "HA",
-                    "app_version": "1.0",
-                },
-            ) as r:
-                res = await r.json()
-
-                track_id = res["result"]["track_id"]
-
-                # ⚡ IMPORTANT : récupérer token si dispo (Freebox Ultra)
-                self.app_token = res["result"].get("app_token")
-
-                print(f"👉 Valide l'app sur ta Freebox (track_id={track_id})")
-
-            # 🔁 Attente validation utilisateur
-            while True:
-                async with self._session.get(
-                    f"{self.host}/api/v8/login/authorize/{track_id}"
-                ) as status_r:
-                    status_json = await status_r.json()
-                    result = status_json.get("result", {})
-                    status = result.get("status")
-
-                    if status == "granted":
-                        # ⚡ Si token pas reçu au POST → fallback ici
-                        if not self.app_token:
-                            self.app_token = result.get("app_token")
-
-                        if not self.app_token:
-                            raise Exception(
-                                f"App token introuvable après validation: {status_json}"
-                            )
-
-                        break
-
-                    elif status == "denied":
-                        raise Exception("Autorisation refusée sur la Freebox")
-
-                await asyncio.sleep(2)
-
-        # 🔹 3. Création session
         password = hashlib.sha1((challenge + self.app_token).encode()).hexdigest()
 
         async with self._session.post(
@@ -79,17 +43,14 @@ class FreeboxAPI:
                 "password": password,
             },
         ) as resp:
-            result = await resp.json()
+            data = await resp.json()
 
-            if not result.get("success"):
-                raise Exception(f"Erreur login session: {result}")
+            if not data.get("success"):
+                raise Exception(data)
 
-            self.session_token = result["result"]["session_token"]
+            self.session_token = data["result"]["session_token"]
 
     async def request(self, method, path, data=None):
-        if not self.session_token:
-            raise Exception("Non authentifié à la Freebox")
-
         headers = {"X-Fbx-App-Auth": self.session_token}
 
         async with self._session.request(
@@ -101,58 +62,6 @@ class FreeboxAPI:
             result = await resp.json()
 
             if not result.get("success"):
-                raise Exception(f"Erreur API Freebox: {result}")
+                raise Exception(result)
 
             return result
-
-    async def get_devices(self):
-        return await self.request("GET", "/lan/browser/pub/")
-
-    async def get_profiles(self):
-        return await self.request("GET", "/parental/profile/")
-
-    async def set_device(self, device_id, state):
-        return await self.request(
-            "PUT",
-            f"/lan/browser/pub/{device_id}",
-            {"active": state},
-        )
-
-    async def set_profile(self, profile_id, enable):
-        week = (
-            {
-                d: [["00:00", "23:59"]]
-                for d in [
-                    "monday",
-                    "tuesday",
-                    "wednesday",
-                    "thursday",
-                    "friday",
-                    "saturday",
-                    "sunday",
-                ]
-            }
-            if enable
-            else {
-                d: []
-                for d in [
-                    "monday",
-                    "tuesday",
-                    "wednesday",
-                    "thursday",
-                    "friday",
-                    "saturday",
-                    "sunday",
-                ]
-            }
-        )
-
-        return await self.request(
-            "PUT",
-            f"/parental/profile/{profile_id}",
-            {"week": week},
-        )
-
-    async def close(self):
-        if self._session:
-            await self._session.close()
