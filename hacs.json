@@ -1,0 +1,6 @@
+{
+  "name": "Freebox Parental Ultimate",
+  "content_in_root": false,
+  "domains": ["freebox_parental"],
+  "iot_class": "local_polling"
+}

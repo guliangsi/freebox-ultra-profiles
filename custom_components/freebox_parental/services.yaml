@@ -1,0 +1,7 @@
+pause_device:
+  description: Pause internet temporairement
+  fields:
+    entity_id:
+      example: switch.iphone_paul
+    duration:
+      example: 1800
