@@ -1,11 +1,14 @@
+import logging
 from datetime import timedelta
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 class FreeboxCoordinator(DataUpdateCoordinator):
     def __init__(self, hass, api):
         super().__init__(
             hass,
-            logger=None,
+            logger=_LOGGER,  # <-- Ajout du logger
             name="freebox_parental",
             update_interval=timedelta(seconds=30),
         )
