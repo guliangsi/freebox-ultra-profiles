@@ -18,31 +18,50 @@ class FreeboxAPI:
         if self._session is None:
             self._session = aiohttp.ClientSession()
 
-        # Challenge
+        # 🔹 1. Récupération du challenge
         async with self._session.get(f"{self.host}/api/v8/login/") as resp:
             result = await resp.json()
             challenge = result["result"]["challenge"]
 
-        # Pairing si pas encore fait
+        # 🔹 2. Pairing automatique (si pas encore fait)
         if self.app_token is None:
-            async with self._session.post(f"{self.host}/api/v8/login/authorize/", json={
-                "app_id": self.app_id,
-                "app_name": "Home Assistant Freebox",
-                "device_name": "HA",
-                "app_version": "1.0"
-            }) as r:
+            async with self._session.post(
+                f"{self.host}/api/v8/login/authorize/",
+                json={
+                    "app_id": self.app_id,
+                    "app_name": "Home Assistant Freebox",
+                    "device_name": "HA",
+                    "app_version": "1.0",
+                },
+            ) as r:
                 res = await r.json()
+
                 track_id = res["result"]["track_id"]
+
+                # ⚡ IMPORTANT : récupérer token si dispo (Freebox Ultra)
+                self.app_token = res["result"].get("app_token")
+
                 print(f"👉 Valide l'app sur ta Freebox (track_id={track_id})")
 
-            # Attente validation
+            # 🔁 Attente validation utilisateur
             while True:
-                async with self._session.get(f"{self.host}/api/v8/login/authorize/{track_id}") as status_r:
+                async with self._session.get(
+                    f"{self.host}/api/v8/login/authorize/{track_id}"
+                ) as status_r:
                     status_json = await status_r.json()
-                    status = status_json["result"]["status"]
+                    result = status_json.get("result", {})
+                    status = result.get("status")
 
                     if status == "granted":
-                        self.app_token = status_json["result"]["app_token"]
+                        # ⚡ Si token pas reçu au POST → fallback ici
+                        if not self.app_token:
+                            self.app_token = result.get("app_token")
+
+                        if not self.app_token:
+                            raise Exception(
+                                f"App token introuvable après validation: {status_json}"
+                            )
+
                         break
 
                     elif status == "denied":
@@ -50,26 +69,41 @@ class FreeboxAPI:
 
                 await asyncio.sleep(2)
 
-        # Session login
+        # 🔹 3. Création session
         password = hashlib.sha1((challenge + self.app_token).encode()).hexdigest()
 
-        async with self._session.post(f"{self.host}/api/v8/login/session/", json={
-            "app_id": self.app_id,
-            "password": password
-        }) as resp:
+        async with self._session.post(
+            f"{self.host}/api/v8/login/session/",
+            json={
+                "app_id": self.app_id,
+                "password": password,
+            },
+        ) as resp:
             result = await resp.json()
+
+            if not result.get("success"):
+                raise Exception(f"Erreur login session: {result}")
+
             self.session_token = result["result"]["session_token"]
 
     async def request(self, method, path, data=None):
+        if not self.session_token:
+            raise Exception("Non authentifié à la Freebox")
+
         headers = {"X-Fbx-App-Auth": self.session_token}
 
         async with self._session.request(
             method,
             f"{self.host}/api/v8{path}",
             headers=headers,
-            json=data
+            json=data,
         ) as resp:
-            return await resp.json()
+            result = await resp.json()
+
+            if not result.get("success"):
+                raise Exception(f"Erreur API Freebox: {result}")
+
+            return result
 
     async def get_devices(self):
         return await self.request("GET", "/lan/browser/pub/")
@@ -81,26 +115,42 @@ class FreeboxAPI:
         return await self.request(
             "PUT",
             f"/lan/browser/pub/{device_id}",
-            {"active": state}
+            {"active": state},
         )
 
     async def set_profile(self, profile_id, enable):
         week = (
-            {d: [["00:00", "23:59"]] for d in [
-                "monday","tuesday","wednesday","thursday",
-                "friday","saturday","sunday"
-            ]}
-            if enable else
-            {d: [] for d in [
-                "monday","tuesday","wednesday","thursday",
-                "friday","saturday","sunday"
-            ]}
+            {
+                d: [["00:00", "23:59"]]
+                for d in [
+                    "monday",
+                    "tuesday",
+                    "wednesday",
+                    "thursday",
+                    "friday",
+                    "saturday",
+                    "sunday",
+                ]
+            }
+            if enable
+            else {
+                d: []
+                for d in [
+                    "monday",
+                    "tuesday",
+                    "wednesday",
+                    "thursday",
+                    "friday",
+                    "saturday",
+                    "sunday",
+                ]
+            }
         )
 
         return await self.request(
             "PUT",
             f"/parental/profile/{profile_id}",
-            {"week": week}
+            {"week": week},
         )
 
     async def close(self):
