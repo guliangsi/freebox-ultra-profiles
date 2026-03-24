@@ -6,10 +6,12 @@ from .const import DOMAIN
 
 
 class FreeboxFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
+    """Flow de configuration pour Freebox Parental"""
+
     VERSION = 1
 
     async def async_step_user(self, user_input=None):
-        """Step initial: demander l'URL de la Freebox"""
+        """Step initial: demander l’URL de la Freebox"""
         if user_input is None:
             return self.async_show_form(
                 step_id="user",
@@ -23,42 +25,19 @@ class FreeboxFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         # Ouvre le pairing et récupère track_id
         pairing = await self.api.open_pairing()
-        self.track_id = pairing["result"]["track_id"]
+        track_id = pairing["result"]["track_id"]
 
-        # Passe directement à l'étape de polling
-        return await self.async_step_pairing()
+        # Attendre que l'app_token soit disponible
+        try:
+            token = await self.api.wait_for_app_token(track_id)
+        except Exception as e:
+            return self.async_abort(reason=str(e))
 
-    async def async_step_pairing(self, user_input=None):
-        """Step de polling pour attendre la validation Freebox"""
-        for _ in range(30):  # ~60 secondes max
-            status = await self.api.get_pairing_status(self.track_id)
-            result = status.get("result", {})
-            status_str = result.get("status")
-
-            if status_str == "granted":
-                # 🔹 boucle pour récupérer le vrai app_token
-                token = None
-                for _ in range(10):  # retry ~20 secondes max
-                    final = await self.api.get_pairing_status(self.track_id)
-                    token = final.get("result", {}).get("app_token")
-                    if token:
-                        break
-                    await asyncio.sleep(2)
-
-                if not token:
-                    return self.async_abort(reason="app_token_missing")
-
-                return self.async_create_entry(
-                    title="Freebox",
-                    data={
-                        "host": self.host,
-                        "app_token": token
-                    }
-                )
-
-            if status_str == "denied":
-                return self.async_abort(reason="access_denied")
-
-            await asyncio.sleep(2)
-
-        return self.async_abort(reason="timeout")
+        # Création de l'entrée Home Assistant
+        return self.async_create_entry(
+            title="Freebox",
+            data={
+                "host": self.host,
+                "app_token": token
+            }
+        )
