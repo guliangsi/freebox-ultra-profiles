@@ -5,6 +5,12 @@ from .coordinator import FreeboxCoordinator
 from .api import FreeboxAPI
 from .const import DOMAIN
 
+# Placeholder minimal pour HA
+async def async_setup(hass: HomeAssistant, config: dict):
+    """Set up the integration (required placeholder)."""
+    return True
+
+# Vrai setup depuis la config flow / UI
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     api = FreeboxAPI(entry.data["host"], "homeassistant.freebox")
 
