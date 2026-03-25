@@ -1,9 +1,11 @@
 {
   "domain": "freebox_parental",
   "name": "Freebox Parental",
-  "documentation": "https://github.com/TONUSER/ha-freebox-parental",
   "version": "1.0.0",
+  "documentation": "https://github.com/tonrepo/freebox_parental",
   "config_flow": true,
-  "requirements": ["aiofreepybox==0.1.10"],
-  "codeowners": ["@guliangsi"]
+  "dependencies": [],
+  "codeowners": ["@guliangsi"],
+  "requirements": ["freebox-api==1.3.0"],
+  "iot_class": "local_polling"
 }

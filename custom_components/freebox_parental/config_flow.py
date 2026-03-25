@@ -2,38 +2,35 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST
 
-from .freebox_api import FreeboxAPI
+from .freebox_api_wrapper import FreeboxAPIWrapper
 
 DOMAIN = "freebox_parental"
 
-
 class FreeboxFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
+    VERSION = 1
 
     async def async_step_user(self, user_input=None):
         if user_input is not None:
             host = user_input[CONF_HOST]
-
-            api = FreeboxAPI(host)
-
+            api = FreeboxAPIWrapper(host)
             try:
-                # 🔥 magie: la lib gère l’auth complète
-                await api.authorize()
-
+                # Login + validation écran Freebox si première fois
+                await api.login()
             except Exception:
                 return self.async_show_form(
                     step_id="user",
                     data_schema=self._schema(),
-                    errors={"base": "cannot_connect"},
+                    errors={"base": "cannot_connect"}
                 )
 
             return self.async_create_entry(
                 title="Freebox Parental",
-                data={CONF_HOST: host},
+                data={CONF_HOST: host}
             )
 
         return self.async_show_form(
             step_id="user",
-            data_schema=self._schema(),
+            data_schema=self._schema()
         )
 
     def _schema(self):

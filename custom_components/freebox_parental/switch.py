@@ -1,18 +1,20 @@
 from homeassistant.components.switch import SwitchEntity
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    coordinator = hass.data["freebox_parental"][entry.entry_id]
+    data = hass.data["freebox_parental"][entry.entry_id]
+    coordinator = data["coordinator"]
+    api = data["api"]
 
     entities = []
-    for profile in coordinator.data["result"]:
-        entities.append(FreeboxProfileSwitch(coordinator, profile))
+    for profile in coordinator.data:
+        entities.append(FreeboxProfileSwitch(coordinator, api, profile))
 
     async_add_entities(entities)
 
-
 class FreeboxProfileSwitch(SwitchEntity):
-    def __init__(self, coordinator, profile):
+    def __init__(self, coordinator, api, profile):
         self.coordinator = coordinator
+        self.api = api
         self.profile = profile
         self._attr_name = f"Freebox {profile['desc']}"
         self._attr_unique_id = f"freebox_profile_{profile['id']}"
@@ -21,10 +23,10 @@ class FreeboxProfileSwitch(SwitchEntity):
     def is_on(self):
         return self.profile["filter_state"] == "allowed"
 
-    async def async_turn_off(self):
-        await self.coordinator.api.pause_profile(self.profile["id"])
+    async def async_turn_off(self, **kwargs):
+        await self.api.pause_profile(self.profile["id"])
         await self.coordinator.async_request_refresh()
 
-    async def async_turn_on(self):
-        await self.coordinator.api.resume_profile(self.profile["id"])
+    async def async_turn_on(self, **kwargs):
+        await self.api.resume_profile(self.profile["id"])
         await self.coordinator.async_request_refresh()
