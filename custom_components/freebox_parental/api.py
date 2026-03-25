@@ -25,29 +25,42 @@ class FreeboxAPI:
             return await resp.json()
 
     async def get_pairing_status(self, track_id):
-        """Récupère le statut du pairing"""
         async with self._session.get(f"{self.host}/api/v8/login/authorize/{track_id}") as resp:
+            return await resp.json()
+
+    async def get_apps(self):
+        """Liste les apps enregistrées"""
+        async with self._session.get(f"{self.host}/api/v8/login/") as resp:
             return await resp.json()
 
     async def wait_for_app_token(self, track_id, timeout=120):
         """
-        Attend que la Freebox retourne le app_token
-        Compatible Freebox Ultra (token retardé)
+        Méthode robuste Freebox Ultra :
+        1. Attend validation
+        2. Si pas de token → fallback via liste apps
         """
         elapsed = 0
 
         while elapsed < timeout:
             status_json = await self.get_pairing_status(track_id)
             result = status_json.get("result", {})
-
             status = result.get("status")
 
             if status == "granted":
-                # ⚠️ Sur Freebox Ultra le token arrive APRES le granted
+                # 🔥 Méthode 1 (classique)
                 token = result.get("app_token")
                 if token:
                     self.app_token = token
                     return token
+
+                # 🔥 Méthode 2 (fallback fiable Ultra)
+                apps = await self.get_apps()
+                for app in apps.get("result", {}).get("apps", []):
+                    if app.get("app_id") == self.app_id:
+                        token = app.get("app_token")
+                        if token:
+                            self.app_token = token
+                            return token
 
             elif status == "denied":
                 raise Exception("access_denied")
@@ -58,35 +71,20 @@ class FreeboxAPI:
         raise Exception("timeout")
 
     async def login(self):
-        """Login avec app_token"""
+        """Login session"""
         if not self.app_token:
             raise Exception("missing_app_token")
 
-        # 1. récupérer challenge
         async with self._session.get(f"{self.host}/api/v8/login/") as resp:
             challenge = (await resp.json())["result"]["challenge"]
 
-        # 2. générer password
         password = hashlib.sha1(
             (challenge + self.app_token).encode()
         ).hexdigest()
 
-        # 3. ouvrir session
         async with self._session.post(f"{self.host}/api/v8/login/session/", json={
             "app_id": self.app_id,
             "password": password
         }) as resp:
             data = await resp.json()
             self.session_token = data["result"]["session_token"]
-
-    async def request(self, method, path, data=None):
-        """Requête authentifiée"""
-        headers = {"X-Fbx-App-Auth": self.session_token}
-
-        async with self._session.request(
-            method,
-            f"{self.host}{path}",
-            json=data,
-            headers=headers
-        ) as resp:
-            return await resp.json()
