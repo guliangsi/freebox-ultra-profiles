@@ -4,6 +4,6 @@
   "documentation": "https://github.com/TONUSER/ha-freebox-parental",
   "version": "1.0.0",
   "config_flow": true,
-  "requirements": [],
+  "requirements": ["aiofreepybox==0.1.10"],
   "codeowners": ["@guliangsi"]
 }
