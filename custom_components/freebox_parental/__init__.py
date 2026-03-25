@@ -1,21 +1,15 @@
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from .freebox_api import FreeboxAPI
+from .coordinator import FreeboxParentalCoordinator
 
-from .api import FreeboxAPI
-from .const import DOMAIN
-
-async def async_setup(hass: HomeAssistant, config: dict):
-    return True
-
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
-    api = FreeboxAPI(
-        entry.data["host"],
-        app_token=entry.data["app_token"]
-    )
-
+async def async_setup_entry(hass, entry):
+    api = FreeboxAPI(entry.data["host"])
     await api.login()
 
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = api
+    coordinator = FreeboxParentalCoordinator(hass, api)
+    await coordinator.async_config_entry_first_refresh()
+
+    hass.data.setdefault("freebox_parental", {})[entry.entry_id] = coordinator
+
+    await hass.config_entries.async_forward_entry_setups(entry, ["switch"])
 
     return True

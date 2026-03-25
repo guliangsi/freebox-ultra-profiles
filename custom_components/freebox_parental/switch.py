@@ -1,60 +1,30 @@
 from homeassistant.components.switch import SwitchEntity
-from .const import DOMAIN
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    coordinator = hass.data[DOMAIN][entry.entry_id]
-
-    devices = coordinator.data["devices"]
-    profiles = coordinator.data["profiles"]
+    coordinator = hass.data["freebox_parental"][entry.entry_id]
 
     entities = []
-
-    for d in devices:
-        entities.append(FreeboxDeviceSwitch(coordinator, d))
-
-    for p in profiles:
-        entities.append(FreeboxProfileSwitch(coordinator, p))
+    for profile in coordinator.data["result"]:
+        entities.append(FreeboxProfileSwitch(coordinator, profile))
 
     async_add_entities(entities)
-
-
-class FreeboxDeviceSwitch(SwitchEntity):
-    def __init__(self, coordinator, device):
-        self.coordinator = coordinator
-        self.api = coordinator.api
-        self.device = device
-
-    @property
-    def name(self):
-        return f"{self.device['primary_name']}"
-
-    @property
-    def is_on(self):
-        return self.device["active"]
-
-    async def async_turn_on(self):
-        self.api.set_device(self.device["id"], True)
-
-    async def async_turn_off(self):
-        self.api.set_device(self.device["id"], False)
 
 
 class FreeboxProfileSwitch(SwitchEntity):
     def __init__(self, coordinator, profile):
         self.coordinator = coordinator
-        self.api = coordinator.api
         self.profile = profile
-
-    @property
-    def name(self):
-        return f"Profil {self.profile['name']}"
+        self._attr_name = f"Freebox {profile['desc']}"
+        self._attr_unique_id = f"freebox_profile_{profile['id']}"
 
     @property
     def is_on(self):
-        return True
-
-    async def async_turn_on(self):
-        self.api.set_profile(self.profile["id"], True)
+        return self.profile["filter_state"] == "allowed"
 
     async def async_turn_off(self):
-        self.api.set_profile(self.profile["id"], False)
+        await self.coordinator.api.pause_profile(self.profile["id"])
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_on(self):
+        await self.coordinator.api.resume_profile(self.profile["id"])
+        await self.coordinator.async_request_refresh()

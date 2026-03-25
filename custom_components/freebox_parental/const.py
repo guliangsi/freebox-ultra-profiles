@@ -1,1 +1,0 @@
-DOMAIN = "freebox_parental"
