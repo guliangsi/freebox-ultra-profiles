@@ -77,8 +77,7 @@ class FreeboxProfileSwitch(SwitchEntity):
             return None
 
         # construction URL complète HTTPS
-        return f"https://{self.api.host}:{self.api.port}{icon_path}"
-
+        return f"{self.api.base}{icon_path}"
     # -------------------------------------------------------
     # ATTRIBUTS ENRICHIS
     # -------------------------------------------------------
