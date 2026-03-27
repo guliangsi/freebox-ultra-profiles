@@ -4,7 +4,7 @@ from homeassistant.core import callback
 
 _LOGGER = logging.getLogger(__name__)
 
-DOMAIN = "freebox_parental"
+DOMAIN = "freebox_ultra"
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -84,3 +84,61 @@ class FreeboxProfileSwitch(SwitchEntity):
     # -------------------------------------------------------
 
     @property
+    def extra_state_attributes(self):
+        p = self._profile()
+
+        # Liste des noms d'appareils associés
+        hosts = []
+        for h in p.get("hosts", []):
+            if "primary_name" in h:
+                hosts.append(h["primary_name"])
+            elif h.get("names"):
+                hosts.append(h["names"][0]["name"])
+            else:
+                hosts.append(h["l2ident"]["id"])
+
+        return {
+            "macs": p.get("macs", []),
+            "hosts": hosts,
+            "override": p.get("override"),
+            "override_mode": p.get("override_mode"),
+            "current_mode": p.get("current_mode"),
+            "rule_mode": p.get("rule_mode"),
+            "next_change": p.get("next_change"),
+            "resolution": p.get("resolution"),
+            "profile_icon": p.get("profile_icon"),
+        }
+
+    # -------------------------------------------------------
+    # ACTIONS
+    # -------------------------------------------------------
+
+    async def async_turn_off(self):
+        """Couper Internet pour le profil."""
+        await self.api.pause_profile(self.profile_id)
+        await self._refresh()
+
+    async def async_turn_on(self):
+        """Autoriser Internet pour le profil."""
+        await self.api.resume_profile(self.profile_id)
+        await self._refresh()
+
+    async def async_update(self):
+        """Update triggered by HA - delegated to coordinator."""
+        await self._refresh()
+
+    @callback
+    async def _refresh(self):
+        await self.coordinator.async_request_refresh()
+
+    # -------------------------------------------------------
+    # UTILS
+    # -------------------------------------------------------
+
+    def _profile(self):
+        """Shorthand."""
+        return self.coordinator.data[self.profile_id]
+
+    def _p(self, key):
+        """Shorthand accès champ profil."""
+        return self._profile().get(key)
