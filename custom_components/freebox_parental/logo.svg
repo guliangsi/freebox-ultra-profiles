@@ -1,0 +1,19 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Fond bleu Home Assistant -->
+  <rect width="512" height="512" rx="90" fill="#18A0FB"/>
+
+  <!-- Symbole Freebox Ultra type "∞" stylisé -->
+  <path d="M150 260c0-60 40-110 90-110s90 50 90 110-40 110-90 110-90-50-90-110zm50 0c0 30 20 60 40 60s40-30 40-60-20-60-40-60-40 30-40 60z"
+        fill="white" opacity="0.90"/>
+
+  <!-- Maison Home Assistant en watermark -->
+  <path d="M256 110l130 120h-40v120h-60V260h-60v90h-60V230h-40z"
+        fill="white" opacity="0.35"/>
+
+  <!-- Texte "FBX Ultra" -->
+  <text x="50%" y="88%" text-anchor="middle" fill="white"
+        font-size="72" font-family="Arial Rounded MT Bold"
+        opacity="0.9">
+    FBX Ultra
+  </text>
+</svg>

@@ -1,31 +1,29 @@
-from datetime import timedelta
-import logging
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from .api import FreeboxUltraAPI
+from .coordinator import FreeboxProfilesCoordinator
 
-from .freebox_api_wrapper import FreeboxAPIWrapper
-
-_LOGGER = logging.getLogger(__name__)
+DOMAIN = "freebox_ultra"
 
 async def async_setup_entry(hass, entry):
-    host = entry.data["host"]
-    api = FreeboxAPIWrapper(host)
+    session = async_create_clientsession(hass)
+
+    api = FreeboxUltraAPI(
+        entry.data["host"],
+        entry.data["port"],
+        "fr.freebox.ha_ultra",
+        entry.data["app_token"]
+    )
+    await api.init(session)
     await api.login()
 
-    # DataUpdateCoordinator pour refresher les profils
-    coordinator = DataUpdateCoordinator(
-        hass,
-        _LOGGER,
-        name="freebox_parental",
-        update_method=api.get_profiles,
-        update_interval=timedelta(seconds=30)
-    )
+    # Create coordinator
+    coordinator = FreeboxProfilesCoordinator(hass, api)
     await coordinator.async_config_entry_first_refresh()
 
-    hass.data.setdefault("freebox_parental", {})[entry.entry_id] = {
-        "api": api,
-        "coordinator": coordinator
-    }
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN]["api"] = api
+    hass.data[DOMAIN]["coordinator"] = coordinator
 
-    # Forward vers switch
     await hass.config_entries.async_forward_entry_setups(entry, ["switch"])
+    
     return True

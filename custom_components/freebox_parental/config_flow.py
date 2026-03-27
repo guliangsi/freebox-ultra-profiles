@@ -1,39 +1,92 @@
-import voluptuous as vol
+import logging
+_LOGGER = logging.getLogger(__name__)
+
 from homeassistant import config_entries
-from homeassistant.const import CONF_HOST
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
+import voluptuous as vol
+import asyncio
 
-from .freebox_api_wrapper import FreeboxAPIWrapper
+from .const import DOMAIN, APP_ID, APP_NAME
 
-DOMAIN = "freebox_parental"
+API_VERSION_URL = "http://mafreebox.freebox.fr/api_version"
+LOCAL = "http://mafreebox.freebox.fr"
 
-class FreeboxFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 1
+class FreeboxConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input=None):
-        if user_input is not None:
-            host = user_input[CONF_HOST]
-            api = FreeboxAPIWrapper(host)
+        _LOGGER.debug("CONFIG_FLOW: async_step_user() called")
+
+        if user_input is None:
+            return self.async_show_form(step_id="user", data_schema=vol.Schema({}))
+
+        session = async_create_clientsession(self.hass)
+
+        #
+        # 1) Lire api_version
+        #
+        try:
+            async with session.get(API_VERSION_URL, timeout=5) as r:
+                info = await r.json()
+        except Exception:
+            return self.async_abort(reason="cannot_connect")
+
+        api_domain = info.get("api_domain")
+        https_port = info.get("https_port")
+
+        if not api_domain or not https_port:
+            return self.async_abort(reason="cannot_connect")
+
+        #
+        # 2) Demande d’autorisation (LOCAL HTTP)
+        #
+        req = {
+            "app_id": APP_ID,
+            "app_name": APP_NAME,
+            "app_version": "1.0",
+            "device_name": "Home Assistant"
+        }
+
+        try:
+            async with session.post(f"{LOCAL}/api/v8/login/authorize/", json=req, timeout=5) as r:
+                auth = await r.json()
+                _LOGGER.debug("DEBUG AUTH RESPONSE: %s", auth)
+                track_id = auth["result"]["track_id"]
+                saved_app_token = auth["result"].get("app_token")  # <-- On sauve ici
+        except Exception:
+            return self.async_abort(reason="cannot_connect")
+
+        if not saved_app_token:
+            return self.async_abort(reason="cannot_connect")
+
+        #
+        # 3) Polling (LOCAL HTTP)
+        #
+        poll_url = f"{LOCAL}/api/v8/login/authorize/{track_id}"
+
+        for _ in range(30):
+            await asyncio.sleep(2)
+
             try:
-                # Login + validation écran Freebox si première fois
-                await api.login()
+                async with session.get(poll_url, timeout=5) as r:
+                    data = await r.json()
+                    _LOGGER.debug("DEBUG POLL RESPONSE: %s", data)
             except Exception:
-                return self.async_show_form(
-                    step_id="user",
-                    data_schema=self._schema(),
-                    errors={"base": "cannot_connect"}
+                return self.async_abort(reason="cannot_connect")
+
+            status = data["result"]["status"]
+
+            if status == "granted":
+                # NE PAS CHERCHER app_token ICI : il n'est pas renvoyé par Ultra
+                return self.async_create_entry(
+                    title="Freebox Ultra",
+                    data={
+                        "host": api_domain,
+                        "port": https_port,
+                        "app_token": saved_app_token
+                    }
                 )
 
-            return self.async_create_entry(
-                title="Freebox Parental",
-                data={CONF_HOST: host}
-            )
+            if status in ("denied", "timeout"):
+                return self.async_abort(reason="auth_failed")
 
-        return self.async_show_form(
-            step_id="user",
-            data_schema=self._schema()
-        )
-
-    def _schema(self):
-        return vol.Schema({
-            vol.Required(CONF_HOST, default="mafreebox.freebox.fr"): str,
-        })
+        return self.async_abort(reason="timeout")

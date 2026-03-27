@@ -1,0 +1,9 @@
+
+pause_profile:
+  fields:
+    profile_id:
+      example: 3
+resume_profile:
+  fields:
+    profile_id:
+      example: 3
