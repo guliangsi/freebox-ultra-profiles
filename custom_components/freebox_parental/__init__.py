@@ -2,7 +2,7 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from .api import FreeboxUltraAPI
 from .coordinator import FreeboxProfilesCoordinator
 
-DOMAIN = "freebox_ultra"
+DOMAIN = "freebox_parental"
 
 async def async_setup_entry(hass, entry):
     session = async_create_clientsession(hass)

@@ -1,6 +1,6 @@
 {
-  "domain": "freebox_ultra",
-  "name": "Freebox Ultra",
+  "domain": "freebox_parental",
+  "name": "Freebox Parental Ultra",
   "version": "1.0.0",
   "config_flow": true,
   "documentation": "https://github.com/guliangsi/freebox_parental",
