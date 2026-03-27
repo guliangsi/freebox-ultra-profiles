@@ -7,6 +7,7 @@ Intégration complète des profils Freebox Ultra OS 15 dans Home Assistant
 Cette intégration apporte à Home Assistant un support avancé pour la Freebox Ultra (Freebox OS 15) en exploitant le module NetworkControl, encore non documenté officiellement mais totalement fonctionnel en API REST.
 Elle permet :
 
+
 🔍 Découverte automatique des profils NetworkControl
 🔄 Mise à jour en temps réel via DataUpdateCoordinator
 🎚 Création automatique d’un switch par profil
